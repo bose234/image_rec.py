@@ -2,15 +2,14 @@ from flask import Flask, request, jsonify
 import torch
 from torchvision import models, transforms
 from PIL import Image
+import numpy as np
 import requests
 
 app = Flask(__name__)
 
-# Load the pre-trained ResNet model
 model = models.resnet50(pretrained=True)
 model.eval()
 
-# Define the transformation for input images
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -18,16 +17,16 @@ transform = transforms.Compose([
 ])
 
 def predict_image(image_path):
-    # Load and preprocess the input image
     img = Image.open(image_path).convert('RGB')
     img = transform(img)
-    img = img.unsqueeze(0)
+    img = np.array(img)  # Convert to NumPy array
+    img = np.expand_dims(img, axis=0)  # Add a new axis
 
     # Make the prediction
     with torch.no_grad():
-        output = model(img)
+        output = model(torch.tensor(img))
 
-    # Load the labels from the URL
+    # Load the labels used by the pre-trained model
     labels_url = "https://raw.githubusercontent.com/anishathalye/imagenet-simple-labels/master/imagenet-simple-labels.json"
     response = requests.get(labels_url)
     labels = response.json()
@@ -47,9 +46,11 @@ def predict():
     image_path = 'temp.jpg'
     file.save(image_path)
 
-    predicted_label = predict_image(image_path)
-
-    return jsonify({'predicted_label': predicted_label})
+    try:
+        predicted_label = predict_image(image_path)
+        return jsonify({'predicted_label': predicted_label})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
